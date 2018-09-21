@@ -22,45 +22,72 @@ server.listen(process.env.PORT || 8081, function () {
 const defaultWallWidth = 80;
 var namespaces = {};
 var entities = {};
-var rooms = parseRooms("assets/map/rooms.json");
-var wall = new Wall(1, 2, 3, 4);
-// later will be generated
-// each room is anchored at the bottom left
-// this map represents:
-//    ________
-//   |        |
-// 1 |  . [2] |
-// 0 | [1][2] |
-//   |________|
-//      0  1
-var map = {
-    0: {
-        0: {
-            roomID: "room1",
-            width: 1,
-            height: 1,
-            segmentX: 0,
-            segmentY: 0
-        }
-    },
-    1: {
-        0: {
-            roomID: "room2",
-            width: 1,
-            height: 2,
-            segmentX: 0,
-            segmentY: 0
-        },
-        1: {
-            roomID: "room2",
-            width: 1,
-            height: 2,
-            segmentX: 0,
-            segmentY: 1
-        }
-    }
-}
+var roomCatalog = parseRooms("assets/map/rooms.json");
+var rooms = {};
+var map = {};
+generateRooms(roomCatalog, rooms, map);
 generateDoors(rooms, map);
+
+function generateRooms(roomCatalog, rooms, map) {
+	var room1 = createRoomFromCatalog(roomCatalog, "room1");
+	var room2 = createRoomFromCatalog(roomCatalog, "room2");
+	var room3 = createRoomFromCatalog(roomCatalog, "room3");
+	var room1a = createRoomFromCatalog(roomCatalog, "room1");
+	rooms[room1.id] = room1;
+	rooms[room2.id] = room2;
+	rooms[room3.id] = room3;
+	rooms[room1a.id] = room1a;
+	// later will be generated
+	// each room is anchored at the bottom left
+	// this map represents:
+	//    ____________
+	//   |            |
+	// 1 | [1a][2][3] |
+	// 0 | [1 ][2] .  |
+	//   |____________|
+	//      0   1  2
+	map[0] = {
+		0: {
+			roomID: room1.id,
+			width: 1,
+			height: 1,
+			segmentX: 0,
+			segmentY: 0
+		},
+		1: {
+			roomID: room1a.id,
+			width: 1,
+			height: 1,
+			segmentX: 0,
+			segmentY: 0
+		}
+	};
+	map[1] = {
+		0: {
+			roomID: room2.id,
+			width: 1,
+			height: 2,
+			segmentX: 0,
+			segmentY: 0
+		},
+		1: {
+			roomID: room2.id,
+			width: 1,
+			height: 2,
+			segmentX: 0,
+			segmentY: 1
+		}
+	};
+	map[2] = {
+		1: {
+			roomID: room3.id,
+			width: 1,
+			height: 1,
+			segmentX: 0,
+			segmentY: 0
+		}
+	}
+}
 
 function generateDoors(rooms, map) {
     for (var x in map) {
@@ -104,7 +131,7 @@ function addDoor(direction, inRoomMapData, toRoomMapData) {
             outputY = -toRoom.height / 2 + defaultWallWidth + outputPad;
         } else {
             doorY = -inRoom.height / 2;
-            outputY = toRoom.height / 2 - defaultWallWidth + outputPad;
+            outputY = toRoom.height / 2 - defaultWallWidth - outputPad;
         }
     } else {
         doorY = segmentCenter.y - defaultWallWidth / 2;
@@ -118,7 +145,7 @@ function addDoor(direction, inRoomMapData, toRoomMapData) {
         }
     }
     console.log(outputX + " " + outputY);
-    inRoom.doors[doorID] = new Door(doorX, doorY, defaultWallWidth, defaultWallWidth, toRoom.id, outputX, outputY);
+    inRoom.doors[doorID] = new Door(doorX, doorY, defaultWallWidth, defaultWallWidth, toRoom.id, outputX, outputY, direction);
 }
 
 function getCenterOfRoomSegment(width, height, mapWidth, mapHeight, segmentX, segmentY) {
@@ -126,37 +153,39 @@ function getCenterOfRoomSegment(width, height, mapWidth, mapHeight, segmentX, se
         height / 2 - segmentY * height / mapHeight - height / mapHeight / 2);
 }
 
+function createRoomFromCatalog(roomCatalog, name) {
+	var roomTemplate = roomCatalog[name];
+	if (roomTemplate.width == null || roomTemplate.height == null || roomTemplate.namespace == null || roomTemplate.walls == null || roomTemplate.name == null) {
+		console.log("error parsing " + name + " from the template:");
+		console.log(roomTemplate);
+	}
+
+	var wallTemplate = roomTemplate.walls;
+	var walls = {};
+	for (var wallID in wallTemplate) {
+		if (wallID === "_generate_basic_") {
+			createBasicWalls(walls, roomTemplate.width, roomTemplate.height);
+		} else {
+			var wall = wallTemplate[wallID];
+			if (wall.x == null || wall.y == null || wall.width == null || wall.height == null) {
+				console.log("error parsing " + name + " wall " + wallID + ":");
+				console.log(wall);
+			}
+			walls[wallID] = new Wall(wall.x, wall.y, wall.width, wall.height);
+		}
+	}
+
+	var roomID = name + "-" + uuidv4();
+	var namespace = "/" + roomID;
+
+	return new Room(roomID, roomTemplate.width, roomTemplate.height, namespace, walls);
+}
+
 // Parses the given file at 'location' as a rooms JSON file and returns an object filled with room data
 function parseRooms(location) {
     var content = fs.readFileSync(location);
-    var parsedRooms = JSON.parse(content);
-    var result = {};
-    for (var roomID in parsedRooms) {
-        var parsedRoom = parsedRooms[roomID];
-        if (parsedRoom.width == null || parsedRoom.height == null || parsedRoom.namespace == null || parsedRoom.walls == null) {
-            console.log("error parsing " + roomID);
-            console.log(parsedRoom);
-        }
-
-        var parsedWalls = parsedRoom.walls;
-        var resultWalls = {};
-        for (var wallID in parsedWalls) {
-            if (wallID === "_generate_basic_") {
-                createBasicWalls(resultWalls, parsedRoom.width, parsedRoom.height);
-            } else {
-                var parsedWall = parsedWalls[wallID];
-                if (parsedWall.x == null || parsedWall.y == null || parsedWall.width == null || parsedWall.height == null) {
-                    console.log("error parsing " + roomID + " wall " + wallID);
-                    console.log(parsedWall);
-                }
-                resultWalls[wallID] = new Wall(parsedWall.x, parsedWall.y, parsedWall.width,
-                    parsedWall.height);
-            }
-        }
-
-        result[roomID] = new Room(roomID, parsedRoom.width, parsedRoom.height, parsedRoom.namespace, resultWalls);
-    }
-    return result;
+	var parsedRooms = JSON.parse(content);
+	return parsedRooms;
 }
 
 io.on('connection', function (socket) {
@@ -175,8 +204,8 @@ io.on('connection', function (socket) {
                 user = user.substring(0, 10);
                 user = user + "...";
             }
-            // determine the room and create the player
-            var roomID = "room1";
+			// determine the room and create the player
+			var roomID = map[0][0].roomID;
             entities[socket.id] = new Player(0, 0, socket, user, rooms[roomID]);
             console.log('player ' + socket.id + ' connected');
         }
@@ -243,8 +272,8 @@ setInterval(function () {
             var room = rooms[entity.roomID];
             for (var otherID in room.doors) {
                 if (entity instanceof Player && room.doors[otherID].open && 
-                    SAT.testCirclePolygon(entity.collider, room.doors[otherID].collider, response)) {
-                    entity.changeRoom(rooms[room.doors[otherID].roomID], room);
+					SAT.testCirclePolygon(entity.collider, room.doors[otherID].collider, response)) {
+					entity.changeRoom(rooms[room.doors[otherID].roomID], room, room.doors[otherID].direction);
                     entity.position.x = room.doors[otherID].outputX;
                     entity.position.y = room.doors[otherID].outputY;
                     response.clear();
@@ -288,10 +317,6 @@ function removePlayerFromRoom(player, currentRoom) {
     delete currentRoom.players[player.id];
 }
 
-function getRoomNamespaceFromPlayer(player) {
-    return namespaces[player.roomID];
-}
-
 function Player(x, y, socket, user, room) {
     this.position = new SAT.Vector(x, y);
     this.velocity = new SAT.Vector(0, 0);
@@ -303,10 +328,14 @@ function Player(x, y, socket, user, room) {
     this.id = socket.id;
     this.roomID = room.id;
     this.collider = new SAT.Circle(this.position, this.radius);
-    this.changeRoom = function (toRoom, fromRoom) {
+    this.changeRoom = function (toRoom, fromRoom, direction) {
         toRoom.players[this.id] = this;
-        this.roomID = toRoom.id;
-        socket.emit('room change', toRoom);
+		this.roomID = toRoom.id;
+		transition = {
+			"room": toRoom,
+			"direction": direction
+		}
+        socket.emit('room change', transition);
         namespaces[toRoom.id].emit('add player', this);
         if (fromRoom) {
             removePlayerFromRoom(this, fromRoom);
@@ -324,13 +353,14 @@ function Wall(x, y, width, height) {
 }
 
 // Door object constructor
-function Door(x, y, width, height, roomID, outputX, outputY) {
+function Door(x, y, width, height, roomID, outputX, outputY, direction) {
     this.position = new SAT.Vector(x, y);
     this.width = width;
     this.height = height;
     this.outputX = outputX;
     this.outputY = outputY;
-    this.roomID = roomID;
+	this.roomID = roomID;
+	this.direction = direction;
     this.open = true;
     this.collider = new SAT.Box(this.position, this.width, this.height).toPolygon();
 }
@@ -345,4 +375,11 @@ function Room(roomID, width, height, namespace, walls) {
     this.players = {};
     this.doors = {};
     namespaces[roomID] = io.of(namespace);
+}
+
+function uuidv4() {
+	return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+		var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+		return v.toString(16);
+	});
 }

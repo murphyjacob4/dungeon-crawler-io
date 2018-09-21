@@ -1,23 +1,37 @@
 {
-    "room1": {
-        "id": "room1",
-        "width": 1200,
-        "height": 900,
-        "enemies": [],
-        "walls": {
-            "_generate_basic_": {}
-        },
-        "namespace": "/room1"
-    },
-    "room2": {
-        "id": "room2",
-        "width": 1200,
-        "height": 1800,
-        "players": {},
-        "enemies": [],
-        "walls": {
-            "_generate_basic_": {}
-        },
-        "namespace": "/room2"
-    }
+	"room1": {
+		"name": "room1",
+		"width": 1200,
+		"height": 900,
+		"enemies": [],
+		"walls": {
+			"_generate_basic_": {}
+		},
+		"namespace": "/room1"
+	},
+	"room2": {
+		"name": "room2",
+		"width": 1200,
+		"height": 1800,
+		"players": {},
+		"enemies": [],
+		"walls": {
+			"_generate_basic_": {}
+		}
+	},
+	"room3": {
+		"name": "room3",
+		"width": 1200,
+		"height": 900,
+		"enemies": [],
+		"walls": {
+			"_generate_basic_": {},
+			"bottom_right": {
+				"x": 640,
+				"y": 490,
+				"width": 480,
+				"height": 330
+			}
+		}
+	}
 }

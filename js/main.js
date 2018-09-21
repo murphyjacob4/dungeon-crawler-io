@@ -1,4 +1,4 @@
-var game = new Phaser.Game("100%", "100%", Phaser.CANVAS, document.getElementById('game'), true, true);
+var game = new Phaser.Game("100%", "100%", Phaser.AUTO, document.getElementById('game'), true, true);
 game.state.add('Game', Game);
 game.state.start('Game');
 
