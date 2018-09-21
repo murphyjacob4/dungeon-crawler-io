@@ -16,16 +16,16 @@ Client.socket.on('room change', function (transition) {
         Client.roomSocket.disconnect();
     }
     Client.roomSocket = io(room.namespace);
-    Client.roomSocket.on('add player', function (player) {
-        Game.addNewPlayer(player.id, player.position.x, player.position.y, player.name);
+    Client.roomSocket.on('add entity', function (entity) {
+        Game.addNewEntity(entity.id, entity.position.x, entity.position.y, entity.renderStyle, entity.name);
     });
 
-    Client.roomSocket.on('update position', function (player) {
-        Game.updatePosition(player.id, player.position.x, player.position.y);
+    Client.roomSocket.on('update entity position', function (entity) {
+        Game.updatePosition(entity.id, entity.position.x, entity.position.y);
     });
 
-    Client.roomSocket.on('remove player', function (player) {
-        Game.removePlayer(player.id);
+    Client.roomSocket.on('remove entity', function (entity) {
+        Game.removeEntity(entity.id);
     });
 });
 

@@ -25,9 +25,7 @@ Game.resize = function (scale, parentBounds) {
 }
 
 Game.create = function () {
-	Game.playerMap = {};
-    Game.wallMap = {};
-	Game.doorMap = {};
+    Game.entityMap = {};
 	background = game.add.tileSprite(-5000, -5000, 10000, 10000, 'background');
 	Client.askNewPlayer(prompt("Please enter your username", "Anonymous"));
 	arrowKeys = game.input.keyboard.createCursorKeys();
@@ -42,30 +40,16 @@ Game.changeRoom = function (transition) {
 	var oldRoom = currentRoom;
 	currentRoom = transition.room;
 	if (oldRoom) {
-		for (var id in Game.playerMap) {
-			delete Game.playerMap[id];
-		}
-		for (var id in Game.wallMap) {
-			delete Game.wallMap[id];
-		}
-		for (var id in Game.doorMap) {
-			delete Game.doorMap[id];
+		for (var id in Game.entityMap) {
+			delete Game.entityMap[id];
 		}
 		game.world.removeAll();
 		background = game.add.tileSprite(-5000, -5000, 10000, 10000, 'background');
-	}
-	for (var id in currentRoom.players) {
-		var player = currentRoom.players[id];
-		Game.addNewPlayer(player.id, player.position.x, player.position.y, player.name);
-	}
-	for (var id in currentRoom.walls) {
-		var wall = currentRoom.walls[id];
-		Game.addNewWall(id, wall.position.x, wall.position.y, wall.width, wall.height);
-	}
-	for (var id in currentRoom.doors) {
-		var door = currentRoom.doors[id];
-		Game.addNewDoor(id, door.position.x, door.position.y, door.width, door.height);
-	}
+    }
+    for (var id in currentRoom.entities) {
+        var entity = currentRoom.entities[id];
+        Game.addNewEntity(entity.id, entity.position.x, entity.position.y, entity.renderStyle, entity.name);
+    }
 	Game.resize();
 }
 
@@ -91,6 +75,34 @@ Game.getMovement = function () {
 	return vector;
 };
 
+Game.addNewEntity = function (id, x, y, renderStyle, name = null) {
+    entity = game.add.graphics(x, y);
+    Game.entityMap[id] = entity;
+    if (Game.thisPlayer === id) {
+        game.camera.follow(Game.entityMap[id]);
+        entity.beginFill(0x609dff);
+        entity.lineStyle(renderStyle.lineThickness, 0x4c90ff, 1);
+        GUI.user = name;
+        GUI.update();
+    } else {
+        entity.beginFill(renderStyle.fillColor);
+        entity.lineStyle(renderStyle.lineThickness, renderStyle.lineColor, 1);
+    }
+    if (renderStyle.shape === "circle") {
+        entity.arc(0, 0, renderStyle.radius, 0, Math.PI * 2, false);
+    } else if (renderStyle.shape === "rectangle") {
+        entity.drawRect(0, 0, renderStyle.width, renderStyle.height);
+    }
+    entity.endFill();
+    if (Game.thisPlayer !== id && name) {
+        var style = { font: "25px Ubuntu", fontWeight: "bold", stroke: "#282828", strokeThickness: 4, fill: "white", align: "center" };
+        var text = game.add.text(0, 40, name, style);
+        text.anchor.set(0.5, 0);
+        entity.addChild(text);
+    }
+}
+
+/*
 Game.addNewPlayer = function (id, x, y, name) {
     Game.playerMap[id] = game.add.graphics(x, y);
     if (Game.thisPlayer === id) {
@@ -127,21 +139,23 @@ Game.addNewDoor = function (id, x, y, width, height) {
     Game.doorMap[id].drawRect(0, 0, width, height);
     Game.doorMap[id].endFill();
 }
+*/
 
 Game.updatePosition = function (id, x, y) {
-	if (Game.playerMap && Game.playerMap[id]) {
-        var player = Game.playerMap[id];
-        player.x = x;
-        player.y = y;
+    if (Game.entityMap && Game.entityMap[id]) {
+        var entity = Game.entityMap[id];
+        entity.x = x;
+        entity.y = y;
 	}
 }
 
-Game.removePlayer = function (id) {
-    if (Game.playerMap[id]) {
-        Game.playerMap[id].destroy();
-        delete Game.playerMap[id];
+Game.removeEntity = function (id) {
+    if (Game.entityMap && Game.entityMap[id]) {
+        Game.entityMap[id].destroy();
+        delete Game.entityMap[id];
     }
 };
+
 var movementLast;
 Game.update = function () {
     var thisMovement = Game.getMovement();

@@ -21,7 +21,7 @@ server.listen(process.env.PORT || 8081, function () {
 
 const defaultWallWidth = 80;
 var namespaces = {};
-var entities = {};
+var movableEntities = {};
 var roomCatalog = parseRooms("assets/map/rooms.json");
 var rooms = {};
 var map = {};
@@ -116,13 +116,10 @@ function addDoor(direction, inRoomMapData, toRoomMapData) {
     var inRoom = rooms[inRoomMapData.roomID];
     var toRoom = rooms[toRoomMapData.roomID];
     var doorID = direction + "-" + inRoomMapData.segmentX + "-" + inRoomMapData.segmentY + "-" + toRoom.id;
-    console.log(doorID);
     var doorX, doorY, outputX, outputY;
     const outputPad = 40;
     var segmentCenter = getCenterOfRoomSegment(inRoom.width, inRoom.height, inRoomMapData.width, inRoomMapData.height, inRoomMapData.segmentX, inRoomMapData.segmentY);
-    console.log(segmentCenter);
     var outputSegmentCenter = getCenterOfRoomSegment(toRoom.width, toRoom.height, toRoomMapData.width, toRoomMapData.height, toRoomMapData.segmentX, toRoomMapData.segmentY);
-    console.log(outputSegmentCenter);
     if (direction === "south" || direction === "north") {
         doorX = segmentCenter.x - defaultWallWidth / 2;
         outputX = outputSegmentCenter.x; // players are anchored at center
@@ -144,8 +141,7 @@ function addDoor(direction, inRoomMapData, toRoomMapData) {
             outputX = -inRoom.width / 2 + defaultWallWidth + outputPad;
         }
     }
-    console.log(outputX + " " + outputY);
-    inRoom.doors[doorID] = new Door(doorX, doorY, defaultWallWidth, defaultWallWidth, toRoom.id, outputX, outputY, direction);
+    inRoom.entities[doorID] = new Door(doorX, doorY, defaultWallWidth, defaultWallWidth, toRoom.id, outputX, outputY, direction);
 }
 
 function getCenterOfRoomSegment(width, height, mapWidth, mapHeight, segmentX, segmentY) {
@@ -161,24 +157,24 @@ function createRoomFromCatalog(roomCatalog, name) {
 	}
 
 	var wallTemplate = roomTemplate.walls;
-	var walls = {};
+	var entities = {};
 	for (var wallID in wallTemplate) {
 		if (wallID === "_generate_basic_") {
-			createBasicWalls(walls, roomTemplate.width, roomTemplate.height);
+			createBasicWalls(entities, roomTemplate.width, roomTemplate.height);
 		} else {
 			var wall = wallTemplate[wallID];
 			if (wall.x == null || wall.y == null || wall.width == null || wall.height == null) {
 				console.log("error parsing " + name + " wall " + wallID + ":");
 				console.log(wall);
 			}
-			walls[wallID] = new Wall(wall.x, wall.y, wall.width, wall.height);
+			entities[wallID] = new Wall(wall.x, wall.y, wall.width, wall.height);
 		}
 	}
 
 	var roomID = name + "-" + uuidv4();
 	var namespace = "/" + roomID;
 
-	return new Room(roomID, roomTemplate.width, roomTemplate.height, namespace, walls);
+	return new Room(roomID, roomTemplate.width, roomTemplate.height, namespace, entities);
 }
 
 // Parses the given file at 'location' as a rooms JSON file and returns an object filled with room data
@@ -195,7 +191,7 @@ io.on('connection', function (socket) {
     // new player function called when client wishes to create a player
     socket.on('new player', function (user) {
         // if there is not a player already created
-        if (!entities[socket.id]) {
+        if (!movableEntities[socket.id]) {
             // truncate the name if needed
             if (!user) {
                 user = "Anonymous";
@@ -206,30 +202,35 @@ io.on('connection', function (socket) {
             }
 			// determine the room and create the player
 			var roomID = map[0][0].roomID;
-            entities[socket.id] = new Player(0, 0, socket, user, rooms[roomID]);
+            new Player(0, 0, socket, user, rooms[roomID]);
             console.log('player ' + socket.id + ' connected');
         }
     });
 
     // movement function called when client has a change in the movement.
 	socket.on('movement', function (movement) {
-        var player = entities[socket.id] || {};
+        var player = movableEntities[socket.id] || {};
         // change the acceleration to be the vector in the direction of 
         // movement with length accelerationSpeed
         player.acceleration = new SAT.Vector(movement.x, movement.y).
             normalize().scale(player.accelerationSpeed);
     });
 
+    socket.on('attack', function (direction) {
+        var player = movableEntities[socket.id];
+
+    });
+
     // called on player disconnect
     socket.on('disconnect', function () {
         // get the player and determine if we knew of this player
-        var player = entities[socket.id];
+        var player = movableEntities[socket.id];
         if (player) {
             console.log('player ' + player.id + ' disconnected');
             var room = rooms[player.roomID];
             // remove the player from the room
             removePlayerFromRoom(player, room);
-			delete entities[player.id];
+			delete movableEntities[player.id];
 		}
 	});
 });
@@ -237,69 +238,61 @@ io.on('connection', function (socket) {
 // Our game loop
 setInterval(function () {
     // loop through all players
-    for (var id in entities) {
+    for (var id in movableEntities) {
         // get the player
-        var entity = entities[id];
+        var entity = movableEntities[id];
         // add the acceleration to the velocity
-		entity.velocity.x += entity.acceleration.x;
+        entity.velocity.x += entity.acceleration.x;
         entity.velocity.y += entity.acceleration.y;
         // if the object doesn't need to move don't continue
         if (entity.velocity.x !== 0 || entity.velocity.y !== 0) {
             // if the velocity is greater than the maxspeed, adjust it
-			if (entity.velocity.len2() > entity.maxSpeed * entity.maxSpeed) {
-				entity.velocity.normalize().scale(entity.maxSpeed);
+            if (entity.velocity.len2() > entity.maxSpeed * entity.maxSpeed) {
+                entity.velocity.normalize().scale(entity.maxSpeed);
             }
             // reduce velocity if no acceleration is occuring (drag)
-			if (entity.acceleration.x === 0) {
-				entity.velocity.x *= 0.9;
-				if (Math.abs(entity.velocity.x) < 0.01) {
-					entity.velocity.x = 0;
-				}
-			}
-			if (entity.acceleration.y === 0) {
-				entity.velocity.y *= 0.9;
-				if (Math.abs(entity.velocity.y) < 0.01) {
-					entity.velocity.y = 0;
-				}
-			}
+            if (entity.acceleration.x === 0) {
+                entity.velocity.x *= 0.9;
+                if (Math.abs(entity.velocity.x) < 0.01) {
+                    entity.velocity.x = 0;
+                }
+            }
+            if (entity.acceleration.y === 0) {
+                entity.velocity.y *= 0.9;
+                if (Math.abs(entity.velocity.y) < 0.01) {
+                    entity.velocity.y = 0;
+                }
+            }
 
             // add the velocity to the position
-			entity.position.x += entity.velocity.x;
-			entity.position.y += entity.velocity.y;
+            entity.position.x += entity.velocity.x;
+            entity.position.y += entity.velocity.y;
 
             // adjust position for collisions
             var response = new SAT.Response().clear();
             var room = rooms[entity.roomID];
-            for (var otherID in room.doors) {
-                if (entity instanceof Player && room.doors[otherID].open && 
-					SAT.testCirclePolygon(entity.collider, room.doors[otherID].collider, response)) {
-					entity.changeRoom(rooms[room.doors[otherID].roomID], room, room.doors[otherID].direction);
-                    entity.position.x = room.doors[otherID].outputX;
-                    entity.position.y = room.doors[otherID].outputY;
-                    response.clear();
-                    return;
+            for (var otherID in room.entities) {
+                var other = room.entities[otherID];
+                var colided = false;
+                if (entity.collider instanceof SAT.Circle && other.collider instanceof SAT.Circle) {
+                    colided = SAT.testCircleCircle(entity.collider, room.entities[otherID].collider, response);
+                } else if (entity.collider instanceof SAT.Circle && other.collider instanceof SAT.Polygon) {
+                    colided = SAT.testCirclePolygon(entity.collider, room.entities[otherID].collider, response);
+                } else if (entity.collider instanceof SAT.Polygon && other.collider instanceof SAT.Circle) {
+                    colided = SAT.testPolygonCircle(entity.collider, room.entities[otherID].collider, response);
+                } else if (entity.collider instanceof SAT.Polygon && other.collider instanceof SAT.Polygon) {
+                    colided = SAT.testPolygonPolygon(entity.collider, room.entities[otherID].collider, response);
+                }
+                if (colided) {
+                    entity.position.sub(response.overlapV);
+                    entity.collide(other);
+                    other.collide(entity);
                 }
                 response.clear();
             }
-			for (var otherID in room.players) {
-				if (otherID !== id) {
-                    if (SAT.testCircleCircle(entity.collider,
-                        room.players[otherID].collider, response)) {
-						entity.position.sub(response.overlapV);
-					}
-					response.clear();
-				}
-			}
-            for (var otherID in room.walls) {
-                if (SAT.testCirclePolygon(entity.collider,
-                    room.walls[otherID].collider, response)) {
-					entity.position.sub(response.overlapV);
-				}
-				response.clear();
-			}
 
             // tell the room the player has changed position
-            namespaces[entity.roomID].emit('update position', entity);
+            namespaces[entity.roomID].emit('update entity position', entity);
 		}
 	}
 }, 1000 / 60);
@@ -313,8 +306,8 @@ function createBasicWalls(walls, width, height) {
 
 function removePlayerFromRoom(player, currentRoom) {
     // inform the room the player is leaving
-    namespaces[currentRoom.id].emit('remove player', player);
-    delete currentRoom.players[player.id];
+    namespaces[currentRoom.id].emit('remove entity', player);
+    delete currentRoom.entities[player.id];
 }
 
 function Player(x, y, socket, user, room) {
@@ -328,20 +321,35 @@ function Player(x, y, socket, user, room) {
     this.id = socket.id;
     this.roomID = room.id;
     this.collider = new SAT.Circle(this.position, this.radius);
+
+    this.renderStyle = {
+        shape: "circle",
+        radius: this.radius,
+        fillColor: 0xff7a7a,
+        lineColor: 0xf75656,
+        lineThickness: 6
+    }
+
     this.changeRoom = function (toRoom, fromRoom, direction) {
-        toRoom.players[this.id] = this;
+        toRoom.entities[this.id] = this;
 		this.roomID = toRoom.id;
 		transition = {
 			"room": toRoom,
 			"direction": direction
 		}
         socket.emit('room change', transition);
-        namespaces[toRoom.id].emit('add player', this);
+        namespaces[toRoom.id].emit('add entity', this);
         if (fromRoom) {
             removePlayerFromRoom(this, fromRoom);
         }
     }
+
+    this.collide = function (other) {
+
+    }
+
     this.changeRoom(room);
+    movableEntities[this.id] = this;
 }
 
 // Wall object constructor
@@ -350,6 +358,19 @@ function Wall(x, y, width, height) {
     this.width = width;
     this.height = height;
     this.collider = new SAT.Box(this.position, this.width, this.height).toPolygon();
+
+    this.renderStyle = {
+        shape: "rectangle",
+        width: this.width,
+        height: this.height,
+        fillColor: 0x8c8c8c,
+        lineColor: 0x8c8c8c,
+        lineThickness: 0
+    }
+
+    this.collide = function (other) {
+
+    }
 }
 
 // Door object constructor
@@ -363,17 +384,32 @@ function Door(x, y, width, height, roomID, outputX, outputY, direction) {
 	this.direction = direction;
     this.open = true;
     this.collider = new SAT.Box(this.position, this.width, this.height).toPolygon();
+
+    this.renderStyle = {
+        shape: "rectangle",
+        width: this.width,
+        height: this.height,
+        fillColor: 0x874500,
+        lineColor: 0x874500,
+        lineThickness: 0
+    }
+
+    this.collide = function (other) {
+        if (other.changeRoom != null) {
+            other.changeRoom(rooms[roomID], rooms[other.roomID], direction);
+            other.position.x = outputX;
+            other.position.y = outputY;
+        }
+    }
 }
 
 // Room object constructor
-function Room(roomID, width, height, namespace, walls) {
+function Room(roomID, width, height, namespace, entities) {
     this.id = roomID;
     this.namespace = namespace;
     this.width = width;
     this.height = height;
-    this.walls = walls;
-    this.players = {};
-    this.doors = {};
+    this.entities = entities;
     namespaces[roomID] = io.of(namespace);
 }
 

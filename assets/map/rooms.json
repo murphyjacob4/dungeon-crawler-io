@@ -27,8 +27,8 @@
 		"walls": {
 			"_generate_basic_": {},
 			"bottom_right": {
-				"x": 640,
-				"y": 490,
+				"x": 40,
+				"y": 40,
 				"width": 480,
 				"height": 330
 			}
