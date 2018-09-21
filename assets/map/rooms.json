@@ -1,0 +1,23 @@
+{
+    "room1": {
+        "id": "room1",
+        "width": 1200,
+        "height": 900,
+        "enemies": [],
+        "walls": {
+            "_generate_basic_": {}
+        },
+        "namespace": "/room1"
+    },
+    "room2": {
+        "id": "room2",
+        "width": 1200,
+        "height": 1800,
+        "players": {},
+        "enemies": [],
+        "walls": {
+            "_generate_basic_": {}
+        },
+        "namespace": "/room2"
+    }
+}
