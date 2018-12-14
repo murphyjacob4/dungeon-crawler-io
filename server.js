@@ -256,7 +256,11 @@ io.on('connection', function (socket) {
 		var player = movableEntities[socket.id] || {};
 		// change the acceleration to be the vector in the direction of
 		// movement with length accelerationSpeed
-		player.acceleration = new SAT.Vector(movement.x, movement.y).normalize().scale(player.accelerationSpeed);
+		if (player.canMove) {
+			player.moveAcceleration = new SAT.Vector(movement.x, movement.y).normalize().scale(player.moveAccelerationSpeed);
+		} else {
+			player.moveAcceleration = new SAT.Vector(0, 0);
+		}
 	});
 
 	socket.on('attack', function (direction) {
@@ -288,34 +292,50 @@ setInterval(function () {
 	for (var id in movableEntities) {
 		// get the player
 		var entity = movableEntities[id];
+
 		// add the acceleration to the velocity
-		entity.velocity.x += entity.acceleration.x;
-		entity.velocity.y += entity.acceleration.y;
+		entity.moveVelocity.x += entity.moveAcceleration.x;
+		entity.moveVelocity.y += entity.moveAcceleration.y;
+		entity.envVelocity.x += entity.envAcceleration.x;
+		entity.envVelocity.y += entity.envAcceleration.y;
+
 		// if the object doesn't need to move don't continue
-		if (entity.velocity.x !== 0 || entity.velocity.y !== 0) {
-			if (entity.acceleration.x != 0 || entity.acceleration.y != 0) {
-				// if the velocity is greater than the maxspeed and the player is moving (via acceleration), adjust it
-				if (entity.velocity.len2() > entity.maxSpeed * entity.maxSpeed) {
-					entity.velocity.normalize().scale(entity.maxSpeed);
+		if (entity.moveVelocity.x !== 0 || entity.moveVelocity.y !== 0 || entity.envVelocity.x !== 0 || entity.envVelocity.y !== 0) {
+			// if the velocity is greater than the maxspeed and the player is moving (via acceleration), adjust it
+			if (entity.moveVelocity.len2() > entity.maxMoveSpeed * entity.maxMoveSpeed) {
+				entity.moveVelocity.normalize().scale(entity.maxMoveSpeed);
+			}
+			// reduce velocity if no acceleration is occuring (drag)
+			if (entity.moveAcceleration.x === 0) {
+				entity.moveVelocity.x *= 0.9;
+				if (Math.abs(entity.moveVelocity.x) < 0.01) {
+					entity.moveVelocity.x = 0;
 				}
 			}
-				// reduce velocity if no acceleration is occuring (drag)
-			if (entity.acceleration.x === 0) {
-				entity.velocity.x *= 0.9;
-				if (Math.abs(entity.velocity.x) < 0.01) {
-					entity.velocity.x = 0;
+			if (entity.moveAcceleration.y === 0) {
+				entity.moveVelocity.y *= 0.9;
+				if (Math.abs(entity.moveVelocity.y) < 0.01) {
+					entity.moveVelocity.y = 0;
 				}
 			}
-			if (entity.acceleration.y === 0) {
-				entity.velocity.y *= 0.9;
-				if (Math.abs(entity.velocity.y) < 0.01) {
-					entity.velocity.y = 0;
+			if (entity.envAcceleration.x === 0) {
+				entity.envVelocity.x *= 0.9;
+				if (Math.abs(entity.envVelocity.x) < 0.01) {
+					entity.envVelocity.x = 0;
+				}
+			}
+			if (entity.envAcceleration.y === 0) {
+				entity.envVelocity.y *= 0.9;
+				if (Math.abs(entity.envVelocity.y) < 0.01) {
+					entity.envVelocity.y = 0;
 				}
 			}
 
 			// add the velocity to the position
-			entity.position.x += entity.velocity.x;
-			entity.position.y += entity.velocity.y;
+			entity.position.x += entity.moveVelocity.x;
+			entity.position.y += entity.moveVelocity.y;
+			entity.position.x += entity.envVelocity.x;
+			entity.position.y += entity.envVelocity.y;
 
 			// adjust position for collisions
 			var response = new SAT.Response().clear();
@@ -336,6 +356,7 @@ setInterval(function () {
 					if (colided) {
 						entity.position.sub(response.overlapV);
 						entity.collide(other, response);
+						response.overlapV = response.overlapV.reverse();
 						other.collide(entity, response);
 					}
 					response.clear();
@@ -363,15 +384,20 @@ function removePlayerFromRoom(player, currentRoom) {
 
 function Player(x, y, socket, user, room) {
 	this.position = new SAT.Vector(x, y);
-	this.velocity = new SAT.Vector(0, 0);
-	this.acceleration = new SAT.Vector(0, 0);
+	this.moveVelocity = new SAT.Vector(0, 0);
+	this.moveAcceleration = new SAT.Vector(0, 0);
+	this.envVelocity = new SAT.V(0,0);
+	this.envAcceleration = new SAT.V(0,0);
 	this.radius = 30;
-	this.accelerationSpeed = 3;
-	this.maxSpeed = 5;
+	this.moveAccelerationSpeed = 3;
+	this.maxMoveSpeed = 5;
 	this.name = user;
 	this.id = socket.id;
 	this.roomID = room.id;
 	this.collider = new SAT.Circle(this.position, this.radius);
+	this.bodyDamage = 1;
+	this.health = 10;
+	this.canMove = true;
 
 	this.renderStyle = {
 		shape: "circle",
@@ -399,6 +425,10 @@ function Player(x, y, socket, user, room) {
 
 	this.collide = function (other, response) {
 		// do nothing on collision yet
+		if (other.health != null) {
+			ApplyKnockback(other, response.overlapV, 10);
+			other.health -= this.bodyDamage
+		}
 	}
 
 	this.changeRoom(room);
@@ -467,16 +497,20 @@ function Room(roomID, width, height, namespace, entities) {
 function Zombie(x, y, room, id) {
 	this.spawnPosition = new SAT.Vector(x, y);
 	this.position = new SAT.Vector(x, y);
-	this.velocity = new SAT.Vector(0, 0);
-	this.acceleration = new SAT.Vector(0, 0);
-	this.accelerationSpeed = 3;
-	this.maxSpeed = 2;
+	this.moveVelocity = new SAT.Vector(0, 0);
+	this.moveAcceleration = new SAT.Vector(0, 0);
+	this.envVelocity = new SAT.V(0,0);
+	this.envAcceleration = new SAT.V(0,0);
+	this.moveAccelerationSpeed = 3;
+	this.maxMoveSpeed = 2;
 	this.width = 64;
 	this.height = 64;
 	this.collider = new SAT.Box(this.position, this.width, this.height).toPolygon();
 	this.collider.pos = this.position; // needed because toPolygon copies position and will not update on movement
 	this.roomID = room.id;
 	this.id = id;
+	this.health = 10;
+	this.canMove = true;
 
 	this.renderStyle = {
 		shape: "rectangle",
@@ -491,40 +525,58 @@ function Zombie(x, y, room, id) {
 		// modify other's health
 		// set other's velocity to simulate knockback
 		if (other instanceof Player) {
-			other.velocity = response.overlapV.normalize().scale(10);
+			ApplyKnockback(other, response.overlapV, 10);
 		}
 	}
 
 	this.tick = function () {
-		var target = null;
-		var targetVectorTo
-		for (var entityID in rooms[room.id].entities) {
-			var entity = rooms[room.id].entities[entityID];
-			if (entity instanceof Player) {
-				if (target) {
-					var vectorTo = new SAT.Vector(target.position.x - (this.position.x + 32), target.position.y - (this.position.y + 32));
-					if (vectorTo.len2() < targetVectorTo.len2()) {
+		if (this.canMove) {
+			var target = null;
+			var targetVectorTo
+			for (var entityID in rooms[room.id].entities) {
+				var entity = rooms[room.id].entities[entityID];
+				if (entity instanceof Player) {
+					if (target) {
+						var vectorTo = new SAT.Vector(target.position.x - (this.position.x + 32), target.position.y - (this.position.y + 32));
+						if (vectorTo.len2() < targetVectorTo.len2()) {
+							target = entity;
+							targetVectorTo = vectorTo;
+						}
+					} else {
 						target = entity;
-						targetVectorTo = vectorTo;
+						targetVectorTo = new SAT.Vector(target.position.x - (this.position.x + 32), target.position.y - (this.position.y + 32));
 					}
-				} else {
-					target = entity;
-					targetVectorTo = new SAT.Vector(target.position.x - (this.position.x + 32), target.position.y - (this.position.y + 32));
 				}
 			}
-		}
 
-		if (target) {
-			this.acceleration = targetVectorTo.normalize().scale(this.accelerationSpeed);
-		} else if (this.acceleration.x != 0 || this.acceleration.y != 0 || this.position.x != this.spawnPosition.x || this.position.y != this.spawnPosition.y) {
-			this.acceleration = new SAT.Vector(0,0);
-			this.position.x = this.spawnPosition.x;
-			this.position.y = this.spawnPosition.y;
+			if (target) {
+				this.moveAcceleration = targetVectorTo.normalize().scale(this.moveAccelerationSpeed);
+			} else if (this.moveAcceleration.x != 0 || this.moveAcceleration.y != 0 || this.position.x != this.spawnPosition.x || this.position.y != this.spawnPosition.y) {
+				// reset back to the starting point for next player
+				this.moveAcceleration.x = 0;
+				this.moveAcceleration.y = 0;
+				this.moveVelocity.x = 0;
+				this.moveVelocity.y = 0
+				this.envAcceleration.x = 0;
+				this.envAcceleration.y = 0;
+				this.envVelocity.x = 0;
+				this.envVelocity.y = 0;
+				this.position.x = this.spawnPosition.x;
+				this.position.y = this.spawnPosition.y;
+			}
+		} else {
+			this.moveAcceleration = new SAT.Vector(0,0);
 		}
 	}
 
 	enemies[id] = this;
 	movableEntities[id] = this;
+}
+
+function ApplyKnockback(other, direction, intensity) {
+	var velV = direction.normalize().scale(intensity);
+	other.envVelocity.x = velV.x;
+	other.envVelocity.y = velV.y;
 }
 
 function uuidv4() {
