@@ -19,6 +19,7 @@ GUI.update = function () {
     GUI.context.lineWidth = 4;
     GUI.context.strokeText(GUI.user, GUI.canvas.width / 2, GUI.canvas.height - 60);
     GUI.context.fillText(GUI.user, GUI.canvas.width / 2, GUI.canvas.height - 60);
+    GUI.context.fillRect(GUI.canvas.width - GUI.canvas.height * 1/4, GUI.canvas.height * 3 / 4, GUI.canvas.height * 7 / 32, GUI.canvas.height * 7 / 32);
 };
 
 window.addEventListener("resize", function () {
