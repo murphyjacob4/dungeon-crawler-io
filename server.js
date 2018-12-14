@@ -20,6 +20,7 @@ server.listen(process.env.PORT || 8081, function () {
 const defaultWallWidth = 80;
 var namespaces = {};
 var movableEntities = {};
+var enemies = {};
 var roomCatalog = parseRooms("assets/map/rooms.json");
 var rooms = {};
 var map = {};
@@ -30,24 +31,24 @@ function generateRooms(roomCatalog, rooms, map) {
 	var room1 = createRoomFromCatalog(roomCatalog, 1);
 	var room2 = createRoomFromCatalog(roomCatalog, 2);
 	var room3 = createRoomFromCatalog(roomCatalog, 3);
-	var room1a = createRoomFromCatalog(roomCatalog, 1);
-	if (!room1 || !room2 || !room3 || !room1a) {
+	var room4 = createRoomFromCatalog(roomCatalog, 4);
+	if (!room1 || !room2 || !room3 || !room4) {
 		console.log("cannot create rooms");
 		return;
 	}
 	rooms[room1.id] = room1;
 	rooms[room2.id] = room2;
 	rooms[room3.id] = room3;
-	rooms[room1a.id] = room1a;
+	rooms[room4.id] = room4;
 	// later will be generated
 	// each room is anchored at the bottom left
 	// this map represents:
-	//    ____________
-	//   |            |
-	// 1 | [1a][2][3] |
-	// 0 | [1 ][2] .  |
-	//   |____________|
-	//      0   1  2
+	//    ___________
+	//   |           |
+	// 1 | [2][3][4] |
+	// 0 | [1][3]    |
+	//   |___________|
+	//      0  1  2
 	map[0] = {
 		0: {
 			roomID: room1.id,
@@ -57,7 +58,7 @@ function generateRooms(roomCatalog, rooms, map) {
 			segmentY: 0
 		},
 		1: {
-			roomID: room1a.id,
+			roomID: room2.id,
 			width: 1,
 			height: 1,
 			segmentX: 0,
@@ -66,14 +67,14 @@ function generateRooms(roomCatalog, rooms, map) {
 	};
 	map[1] = {
 		0: {
-			roomID: room2.id,
+			roomID: room3.id,
 			width: 1,
 			height: 2,
 			segmentX: 0,
 			segmentY: 0
 		},
 		1: {
-			roomID: room2.id,
+			roomID: room3.id,
 			width: 1,
 			height: 2,
 			segmentX: 0,
@@ -82,7 +83,7 @@ function generateRooms(roomCatalog, rooms, map) {
 	};
 	map[2] = {
 		1: {
-			roomID: room3.id,
+			roomID: room4.id,
 			width: 1,
 			height: 1,
 			segmentX: 0,
@@ -174,9 +175,10 @@ function createRoomFromCatalog(roomCatalog, id) {
 		return null;
 	}
 
+	var entities = {};
+
 	// get the walls and parse them into entities
 	var wallTemplate = roomTemplate.walls;
-	var entities = {};
 	for (var i = 0; i < wallTemplate.length; i++) {
 		var wall = wallTemplate[i];
 		// determine the wall type
@@ -197,12 +199,26 @@ function createRoomFromCatalog(roomCatalog, id) {
 		}
 	}
 
+
 	// generate a roomID and namespace based on that id
 	var roomID = id + "-" + uuidv4();
 	var namespace = "/" + roomID;
 
 	// return a new room
-	return new Room(roomID, roomTemplate.width, roomTemplate.height, namespace, entities);
+	var completedRoom = new Room(roomID, roomTemplate.width, roomTemplate.height, namespace, entities);
+
+	var entitySpawns = roomTemplate.enemy_spawns;
+	var entityTypes = roomTemplate.enemy_types;
+	for (var i = 0; i < entitySpawns.length; i++) {
+		var entitySpawn = entitySpawns[i];
+		var entityType = entityTypes[Math.floor(Math.random() * entityTypes.length)];
+		if (entityType === "zombie") {
+			var zombieID = "zombie-" + uuidv4();
+			completedRoom.entities[zombieID] = new Zombie(entitySpawn.x, entitySpawn.y, completedRoom, zombieID);
+		}
+	}
+
+	return completedRoom;
 }
 
 // Parses the given file at 'location' as a rooms JSON file and returns an object filled with room data
@@ -240,8 +256,7 @@ io.on('connection', function (socket) {
 		var player = movableEntities[socket.id] || {};
 		// change the acceleration to be the vector in the direction of
 		// movement with length accelerationSpeed
-		player.acceleration = new SAT.Vector(movement.x, movement.y).
-		normalize().scale(player.accelerationSpeed);
+		player.acceleration = new SAT.Vector(movement.x, movement.y).normalize().scale(player.accelerationSpeed);
 	});
 
 	socket.on('attack', function (direction) {
@@ -265,6 +280,10 @@ io.on('connection', function (socket) {
 
 // Our game loop
 setInterval(function () {
+	for (var id in enemies) {
+		var enemy = enemies[id];
+		enemy.tick();
+	}
 	// loop through all players
 	for (var id in movableEntities) {
 		// get the player
@@ -274,11 +293,13 @@ setInterval(function () {
 		entity.velocity.y += entity.acceleration.y;
 		// if the object doesn't need to move don't continue
 		if (entity.velocity.x !== 0 || entity.velocity.y !== 0) {
-			// if the velocity is greater than the maxspeed, adjust it
-			if (entity.velocity.len2() > entity.maxSpeed * entity.maxSpeed) {
-				entity.velocity.normalize().scale(entity.maxSpeed);
+			if (entity.acceleration.x != 0 || entity.acceleration.y != 0) {
+				// if the velocity is greater than the maxspeed and the player is moving (via acceleration), adjust it
+				if (entity.velocity.len2() > entity.maxSpeed * entity.maxSpeed) {
+					entity.velocity.normalize().scale(entity.maxSpeed);
+				}
 			}
-			// reduce velocity if no acceleration is occuring (drag)
+				// reduce velocity if no acceleration is occuring (drag)
 			if (entity.acceleration.x === 0) {
 				entity.velocity.x *= 0.9;
 				if (Math.abs(entity.velocity.x) < 0.01) {
@@ -300,23 +321,25 @@ setInterval(function () {
 			var response = new SAT.Response().clear();
 			var room = rooms[entity.roomID];
 			for (var otherID in room.entities) {
-				var other = room.entities[otherID];
-				var colided = false;
-				if (entity.collider instanceof SAT.Circle && other.collider instanceof SAT.Circle) {
-					colided = SAT.testCircleCircle(entity.collider, room.entities[otherID].collider, response);
-				} else if (entity.collider instanceof SAT.Circle && other.collider instanceof SAT.Polygon) {
-					colided = SAT.testCirclePolygon(entity.collider, room.entities[otherID].collider, response);
-				} else if (entity.collider instanceof SAT.Polygon && other.collider instanceof SAT.Circle) {
-					colided = SAT.testPolygonCircle(entity.collider, room.entities[otherID].collider, response);
-				} else if (entity.collider instanceof SAT.Polygon && other.collider instanceof SAT.Polygon) {
-					colided = SAT.testPolygonPolygon(entity.collider, room.entities[otherID].collider, response);
+				if (otherID != entity.id) {
+					var other = room.entities[otherID];
+					var colided = false;
+					if (entity.collider instanceof SAT.Circle && other.collider instanceof SAT.Circle) {
+						colided = SAT.testCircleCircle(entity.collider, room.entities[otherID].collider, response);
+					} else if (entity.collider instanceof SAT.Circle && other.collider instanceof SAT.Polygon) {
+						colided = SAT.testCirclePolygon(entity.collider, room.entities[otherID].collider, response);
+					} else if (entity.collider instanceof SAT.Polygon && other.collider instanceof SAT.Circle) {
+						colided = SAT.testPolygonCircle(entity.collider, room.entities[otherID].collider, response);
+					} else if (entity.collider instanceof SAT.Polygon && other.collider instanceof SAT.Polygon) {
+						colided = SAT.testPolygonPolygon(entity.collider, room.entities[otherID].collider, response);
+					}
+					if (colided) {
+						entity.position.sub(response.overlapV);
+						entity.collide(other, response);
+						other.collide(entity, response);
+					}
+					response.clear();
 				}
-				if (colided) {
-					entity.position.sub(response.overlapV);
-					entity.collide(other);
-					other.collide(entity);
-				}
-				response.clear();
 			}
 
 			// tell the room the player has changed position
@@ -374,7 +397,7 @@ function Player(x, y, socket, user, room) {
 		socket.emit('room change', transition);
 	}
 
-	this.collide = function (other) {
+	this.collide = function (other, response) {
 		// do nothing on collision yet
 	}
 
@@ -398,7 +421,7 @@ function Wall(x, y, width, height) {
 		lineThickness: 0
 	}
 
-	this.collide = function (other) {
+	this.collide = function (other, response) {
 		// do nothing on collision
 	}
 }
@@ -424,7 +447,7 @@ function Door(x, y, width, height, roomID, outputX, outputY, direction) {
 		lineThickness: 0
 	}
 
-	this.collide = function (other) {
+	this.collide = function (other, response) {
 		if (other.changeRoom != null) {
 			other.changeRoom(rooms[roomID], rooms[other.roomID], direction, outputX, outputY);
 		}
@@ -439,6 +462,69 @@ function Room(roomID, width, height, namespace, entities) {
 	this.height = height;
 	this.entities = entities;
 	namespaces[roomID] = io.of(namespace);
+}
+
+function Zombie(x, y, room, id) {
+	this.spawnPosition = new SAT.Vector(x, y);
+	this.position = new SAT.Vector(x, y);
+	this.velocity = new SAT.Vector(0, 0);
+	this.acceleration = new SAT.Vector(0, 0);
+	this.accelerationSpeed = 3;
+	this.maxSpeed = 2;
+	this.width = 64;
+	this.height = 64;
+	this.collider = new SAT.Box(this.position, this.width, this.height).toPolygon();
+	this.collider.pos = this.position; // needed because toPolygon copies position and will not update on movement
+	this.roomID = room.id;
+	this.id = id;
+
+	this.renderStyle = {
+		shape: "rectangle",
+		width: this.width,
+		height: this.height,
+		fillColor: 0x33cc33,
+		lineColor: 0x009933,
+		lineThickness: 6
+	}
+
+	this.collide = function (other, response) {
+		// modify other's health
+		// set other's velocity to simulate knockback
+		if (other instanceof Player) {
+			other.velocity = response.overlapV.normalize().scale(10);
+		}
+	}
+
+	this.tick = function () {
+		var target = null;
+		var targetVectorTo
+		for (var entityID in rooms[room.id].entities) {
+			var entity = rooms[room.id].entities[entityID];
+			if (entity instanceof Player) {
+				if (target) {
+					var vectorTo = new SAT.Vector(target.position.x - (this.position.x + 32), target.position.y - (this.position.y + 32));
+					if (vectorTo.len2() < targetVectorTo.len2()) {
+						target = entity;
+						targetVectorTo = vectorTo;
+					}
+				} else {
+					target = entity;
+					targetVectorTo = new SAT.Vector(target.position.x - (this.position.x + 32), target.position.y - (this.position.y + 32));
+				}
+			}
+		}
+
+		if (target) {
+			this.acceleration = targetVectorTo.normalize().scale(this.accelerationSpeed);
+		} else if (this.acceleration.x != 0 || this.acceleration.y != 0 || this.position.x != this.spawnPosition.x || this.position.y != this.spawnPosition.y) {
+			this.acceleration = new SAT.Vector(0,0);
+			this.position.x = this.spawnPosition.x;
+			this.position.y = this.spawnPosition.y;
+		}
+	}
+
+	enemies[id] = this;
+	movableEntities[id] = this;
 }
 
 function uuidv4() {

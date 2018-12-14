@@ -3,16 +3,18 @@
 	  "id": 1,
 		"width": 1200,
 		"height": 900,
-		"enemies": [],
+		"enemy_spawns": [],
+		"enemy_types": [],
 		"walls": [
 			{"type": "basic"}
 		]
 	},
 	{
-		"id": 2,
+	  "id": 2,
 		"width": 1200,
-		"height": 1800,
-		"enemies": [],
+		"height": 900,
+		"enemy_spawns": [{"x": -32, "y": -32}],
+		"enemy_types": ["zombie"],
 		"walls": [
 			{"type": "basic"}
 		]
@@ -20,8 +22,19 @@
 	{
 		"id": 3,
 		"width": 1200,
+		"height": 1800,
+		"enemy_spawns": [],
+		"enemy_types": ["zombie"],
+		"walls": [
+			{"type": "basic"}
+		]
+	},
+	{
+		"id": 4,
+		"width": 1200,
 		"height": 900,
-		"enemies": [],
+		"enemy_spawns": [],
+		"enemy_types": ["zombie"],
 		"walls": [
 			{"type": "basic"},
 			{
