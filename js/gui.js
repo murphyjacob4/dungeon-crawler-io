@@ -4,6 +4,7 @@ GUI.user = null;
 GUI.experience = 0;
 GUI.level = 0;
 GUI.health = 0;
+GUI.maxHealth = 0;
 GUI.canvas = document.getElementById("gui");
 GUI.context = GUI.canvas.getContext("2d");
 

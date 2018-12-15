@@ -276,7 +276,7 @@ io.on('connection', function (socket) {
 			console.log('player ' + player.id + ' disconnected');
 			var room = rooms[player.roomID];
 			// remove the player from the room
-			removePlayerFromRoom(player, room);
+			removeEntityFromRoom(player, room);
 			delete movableEntities[player.id];
 		}
 	});
@@ -376,10 +376,10 @@ function createBasicWalls(walls, width, height) {
 	walls["bottom_wall"] = new Wall(-width / 2, height / 2 - defaultWallWidth, width, defaultWallWidth);
 }
 
-function removePlayerFromRoom(player, currentRoom) {
+function removeEntityFromRoom(entity, currentRoom) {
 	// inform the room the player is leaving
-	namespaces[currentRoom.id].emit('remove entity', player);
-	delete currentRoom.entities[player.id];
+	namespaces[currentRoom.id].emit('remove entity', entity);
+	delete currentRoom.entities[entity.id];
 }
 
 function Player(x, y, socket, user, room) {
@@ -395,8 +395,9 @@ function Player(x, y, socket, user, room) {
 	this.id = socket.id;
 	this.roomID = room.id;
 	this.collider = new SAT.Circle(this.position, this.radius);
-	this.bodyDamage = 1;
-	this.health = 10;
+	this.bodyDamage = 2;
+	this.maxHealth = 10;
+	this.health = this.maxHealth;
 	this.canMove = true;
 
 	this.renderStyle = {
@@ -415,7 +416,7 @@ function Player(x, y, socket, user, room) {
 			"direction": direction
 		}
 		if (fromRoom) {
-			removePlayerFromRoom(this, fromRoom);
+			removeEntityFromRoom(this, fromRoom);
 			this.position.x = outputX;
 			this.position.y = outputY;
 		}
@@ -425,9 +426,20 @@ function Player(x, y, socket, user, room) {
 
 	this.collide = function (other, response) {
 		// do nothing on collision yet
-		if (other.health != null) {
+		if (other.damage != null) {
 			ApplyKnockback(other, response.overlapV, 10);
-			other.health -= this.bodyDamage
+			other.damage(this.bodyDamage);
+		}
+	}
+
+	this.damage = function (amount) {
+		this.health -= amount;
+		var socket
+		namespaces[this.roomID].emit('update health', this)
+		if (this.health <= 0) {
+			namespaces[this.roomID].emit('death', this);
+			removeEntityFromRoom(this, rooms[this.roomID]);
+			delete movableEntities[this.id];
 		}
 	}
 
@@ -509,7 +521,9 @@ function Zombie(x, y, room, id) {
 	this.collider.pos = this.position; // needed because toPolygon copies position and will not update on movement
 	this.roomID = room.id;
 	this.id = id;
-	this.health = 10;
+	this.bodyDamage = 2;
+	this.maxHealth = 10;
+	this.health = this.maxHealth;
 	this.canMove = true;
 
 	this.renderStyle = {
@@ -526,6 +540,7 @@ function Zombie(x, y, room, id) {
 		// set other's velocity to simulate knockback
 		if (other instanceof Player) {
 			ApplyKnockback(other, response.overlapV, 10);
+			other.damage(this.bodyDamage);
 		}
 	}
 
@@ -569,8 +584,20 @@ function Zombie(x, y, room, id) {
 		}
 	}
 
+	this.damage = function (amount) {
+		this.health -= amount;
+		namespaces[this.roomID].emit('update health', this)
+		if (this.health <= 0) {
+			namespaces[this.roomID].emit('death', this);
+			removeEntityFromRoom(this, rooms[this.roomID]);
+			delete enemies[this.id];
+			delete movableEntities[this.id];
+		}
+	}
+
 	enemies[id] = this;
 	movableEntities[id] = this;
+	namespaces[this.roomID].emit('add entity', this)
 }
 
 function ApplyKnockback(other, direction, intensity) {

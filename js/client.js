@@ -17,12 +17,16 @@ Client.socket.on('room change', function (transition) {
   }
   Client.roomSocket = io(room.namespace);
   Client.roomSocket.on('add entity', function (entity) {
-      Game.addNewEntity(entity.id, entity.position.x, entity.position.y, entity.renderStyle, entity.name);
+      Game.addNewEntity(entity.id, entity.position.x, entity.position.y, entity.renderStyle, entity.name, entity.health, entity.maxHealth);
   });
 
   Client.roomSocket.on('update entity position', function (entity) {
       Game.updatePosition(entity.id, entity.position.x, entity.position.y);
   });
+
+	Client.roomSocket.on('update health', function (entity) {
+		Game.updateHealth(entity.id, entity.health, entity.maxHealth);
+	});
 
   Client.roomSocket.on('remove entity', function (entity) {
       Game.removeEntity(entity.id);
