@@ -10,9 +10,12 @@ Client.socket.on('client id', function (id) {
 });
 
 Client.socket.on('update health', function (entity) {
-	console.log('update health of ' + entity.name);
 	Game.updateHealth(entity.id, entity.health, entity.maxHealth);
 });
+
+Client.socket.on('death', function (entity) {
+	Game.registerDeath(entity.id);
+})
 
 Client.socket.on('room change', function (transition) {
 	var room = transition.room;
@@ -30,7 +33,6 @@ Client.socket.on('room change', function (transition) {
   });
 
 	Client.roomSocket.on('update health', function (entity) {
-		console.log('update health of ' + entity.name);
 		Game.updateHealth(entity.id, entity.health, entity.maxHealth);
 	});
 

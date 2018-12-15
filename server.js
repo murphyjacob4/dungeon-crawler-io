@@ -430,7 +430,6 @@ function Player(x, y, socket, user, room) {
 	this.collide = function (other, response) {
 		// do nothing on collision yet
 		if (other.damage != null) {
-			console.log("damaging other")
 			other.damage(this.bodyDamage, response.overlapV, this.knockback);
 		}
 	}
@@ -439,10 +438,13 @@ function Player(x, y, socket, user, room) {
 		if (this.canBeDamaged) {
 			ApplyKnockback(this, knockbackDirection, knockbackIntensity);
 			this.health -= amount;
-			var socket
-			namespaces[this.roomID].emit('update health', this)
+			// broadcast to both the room and the user to guarantee the user gets it (in case of travelling rooms)
+			namespaces[this.roomID].emit('update health', this);
+			socket.emit('update health', this);
 			if (this.health <= 0) {
+				// broadcast to both for the same reason
 				namespaces[this.roomID].emit('death', this);
+				socket.emit('death', this);
 				removeEntityFromRoom(this, rooms[this.roomID]);
 				delete movableEntities[this.id];
 			} else {

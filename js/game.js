@@ -4,10 +4,12 @@ var scale;
 
 Game.init = function () {
   game.scale.scaleMode = Phaser.ScaleManager.EXACT_FIT;
-  //game.scale.setResizeCallback(Game.resize);
+  game.scale.setResizeCallback(Game.resize);
   game.scale.onSizeChange = Game.resize;
   game.scale.onFullscreenChange = Game.resize;
   scale = game.height / 900;
+  GUI.scale = scale;
+  GUI.update();
 };
 
 Game.preload = function () {
@@ -25,6 +27,8 @@ Game.resize = function (scale, parentBounds) {
   game.camera.width = width;
   game.camera.height = height;
   scale = height / 900;
+  GUI.scale = scale;
+  GUI.update();
   if (currentRoom) {
     height = Math.max(height, currentRoom.height * scale);
     width = Math.max(width, currentRoom.width * scale);
@@ -108,15 +112,15 @@ Game.addNewEntity = function (id, x, y, renderStyle, name = null, health = null,
   }
   entity.endFill();
   if (Game.thisPlayer !== id && health) {
-    var healthBar = renderStyle.shape === "circle" ? game.add.graphics(-renderStyle.radius, (renderStyle.radius + 20) * scale) :
-      game.add.graphics(0, (renderStyle.height + 20) * scale);
+    var healthBar = renderStyle.shape === "circle" ? game.add.graphics((-renderStyle.radius - 2.5) * scale, (renderStyle.radius + 20) * scale) :
+      game.add.graphics(-2.5 * scale, (renderStyle.height + 20) * scale);
     healthBar.anchor.set(0, 0);
     entity.addChild(healthBar);
     entity.setChildIndex(healthBar, 0);
     Game.updateHealth(id, health, maxHealth);
   }
   if (Game.thisPlayer !== id && name) {
-    var style = { font: "25px Ubuntu", fontWeight: "bold", stroke: "#282828", strokeThickness: 4 * scale, fill: "white", align: "center" };
+    var style = { font: Math.floor(25 * scale) + "px Ubuntu", fontWeight: "bold", stroke: "#282828", strokeThickness: 4 * scale, fill: "white", align: "center" };
     var text = game.add.text(0, -40 * scale, name, style);
     text.anchor.set(.5, 1);
     entity.addChild(text);
