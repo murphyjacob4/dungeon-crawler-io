@@ -9,6 +9,11 @@ Client.socket.on('client id', function (id) {
 	Game.thisPlayer = id;
 });
 
+Client.socket.on('update health', function (entity) {
+	console.log('update health of ' + entity.name);
+	Game.updateHealth(entity.id, entity.health, entity.maxHealth);
+});
+
 Client.socket.on('room change', function (transition) {
 	var room = transition.room;
 	Game.changeRoom(transition);
@@ -25,7 +30,12 @@ Client.socket.on('room change', function (transition) {
   });
 
 	Client.roomSocket.on('update health', function (entity) {
+		console.log('update health of ' + entity.name);
 		Game.updateHealth(entity.id, entity.health, entity.maxHealth);
+	});
+
+	Client.roomSocket.on('death', function (entity) {
+		Game.registerDeath(entity.id);
 	});
 
   Client.roomSocket.on('remove entity', function (entity) {

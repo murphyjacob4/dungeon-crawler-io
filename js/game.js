@@ -1,8 +1,11 @@
 var Game = {};
 
+var scale;
+
 Game.init = function () {
-  game.scale.scaleMode = Phaser.ScaleManager.RESIZE;
+  game.scale.scaleMode = Phaser.ScaleManager.EXACT_FIT;
   game.scale.setResizeCallback(Game.resize);
+  scale = game.height / 900;
 };
 
 Game.preload = function () {
@@ -17,12 +20,15 @@ var currentRoom;
 Game.resize = function (scale, parentBounds) {
   var height = game.height;
   var width = game.width;
+  game.camera.width = width;
+  game.camera.height = height;
+  scale = height / 900;
   if (currentRoom) {
-    height = Math.max(height, currentRoom.height);
-    width = Math.max(width, currentRoom.width);
+    height = Math.max(height, currentRoom.height * scale);
+    width = Math.max(width, currentRoom.width * scale);
+    game.world.setBounds(-width / 2, -height / 2, width, height);
   }
-  game.world.setBounds(-width / 2, -height / 2, width, height);
-}
+};
 
 Game.create = function () {
   Game.entityMap = {};
@@ -81,35 +87,36 @@ Game.getMovement = function () {
 };
 
 Game.addNewEntity = function (id, x, y, renderStyle, name = null, health = null, maxHealth = null) {
-  entity = game.add.graphics(x, y);
+  entity = game.add.graphics(x * scale, y * scale);
   Game.entityMap[id] = entity;
   if (Game.thisPlayer === id) {
     game.camera.follow(Game.entityMap[id]);
     entity.beginFill(0x609dff);
-    entity.lineStyle(renderStyle.lineThickness, 0x4c90ff, 1);
+    entity.lineStyle(renderStyle.lineThickness * scale, 0x4c90ff, 1);
     GUI.user = name;
     GUI.update();
   } else {
     entity.beginFill(renderStyle.fillColor);
-    entity.lineStyle(renderStyle.lineThickness, renderStyle.lineColor, 1);
+    entity.lineStyle(renderStyle.lineThickness * scale, renderStyle.lineColor, 1);
   }
   if (renderStyle.shape === "circle") {
-    entity.arc(0, 0, renderStyle.radius, 0, Math.PI * 2, false);
+    entity.arc(0, 0, renderStyle.radius * scale, 0, Math.PI * 2, false);
   } else if (renderStyle.shape === "rectangle") {
-    entity.drawRect(0, 0, renderStyle.width, renderStyle.height);
+    entity.drawRect(0, 0, renderStyle.width * scale, renderStyle.height * scale);
   }
   entity.endFill();
   if (Game.thisPlayer !== id && health) {
-    var healthBar = game.add.graphics(0, renderStyle.height + 20);
+    var healthBar = renderStyle.shape === "circle" ? game.add.graphics(-renderStyle.radius, (renderStyle.radius + 20) * scale) :
+      game.add.graphics(0, (renderStyle.height + 20) * scale);
     healthBar.anchor.set(0, 0);
     entity.addChild(healthBar);
     entity.setChildIndex(healthBar, 0);
     Game.updateHealth(id, health, maxHealth);
   }
   if (Game.thisPlayer !== id && name) {
-    var style = { font: "25px Ubuntu", fontWeight: "bold", stroke: "#282828", strokeThickness: 4, fill: "white", align: "center" };
-    var text = game.add.text(0, 40, name, style);
-    text.anchor.set(0.5, 0);
+    var style = { font: "25px Ubuntu", fontWeight: "bold", stroke: "#282828", strokeThickness: 4 * scale, fill: "white", align: "center" };
+    var text = game.add.text(0, -40 * scale, name, style);
+    text.anchor.set(.5, 1);
     entity.addChild(text);
     entity.setChildIndex(text, 1);
   }
@@ -157,8 +164,8 @@ Game.doorMap[id].endFill();
 Game.updatePosition = function (id, x, y) {
   if (Game.entityMap && Game.entityMap[id]) {
     var entity = Game.entityMap[id];
-    entity.x = x;
-    entity.y = y;
+    entity.x = x * scale;
+    entity.y = y * scale;
   }
 }
 
@@ -174,15 +181,16 @@ Game.updateHealth = function (id, health, maxHealth) {
     if (id === Game.thisPlayer) {
       GUI.health = health;
       GUI.maxHealth = maxHealth;
+      GUI.update();
     } else {
       var entity = Game.entityMap[id];
       var healthBar = entity.getChildAt(0);
       if (healthBar) {
         healthBar.clear();
         healthBar.beginFill(0x990000);
-        healthBar.drawRoundedRect(-5, -5, (entity.width + 5) * health/maxHealth + 5, 20, 10);
+        healthBar.drawRoundedRect(-5 * scale, -5 * scale, (entity.width / scale + 10) * scale, 20 * scale, 10 * scale);
         healthBar.beginFill(0xff0000);
-        healthBar.drawRoundedRect(-2.5, -2.5, (entity.width + 5) * health/maxHealth, 15, 10);
+        healthBar.drawRoundedRect(-2.5 * scale, -2.5 * scale, ((entity.width / scale + 5) * health/maxHealth) * scale, 15 * scale, 10 * scale);
         healthBar.endFill();
       }
     }
@@ -195,6 +203,16 @@ Game.update = function () {
   if (!movementLast || thisMovement !== movementLast) {
     Client.sendMovement(thisMovement);
     movementLast = thisMovement;
+  }
+}
+
+Game.registerDeath = function (id) {
+  if (Game.entityMap && Game.entityMap[id]) {
+    if (id === Game.thisPlayer) {
+      Client.askNewPlayer(prompt("You died. Please enter a name to respawn as...", "Anonymous"));
+    } else {
+      // death animation is forthcoming
+    }
   }
 }
 

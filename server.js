@@ -445,6 +445,7 @@ function Player(x, y, socket, user, room) {
 
 	this.changeRoom(room);
 	movableEntities[this.id] = this;
+	socket.emit('update health', this);
 }
 
 // Wall object constructor
@@ -578,6 +579,8 @@ function Zombie(x, y, room, id) {
 				this.envVelocity.y = 0;
 				this.position.x = this.spawnPosition.x;
 				this.position.y = this.spawnPosition.y;
+				this.health = this.maxHealth;
+				namespaces[this.roomID].emit('update health', this)
 			}
 		} else {
 			this.moveAcceleration = new SAT.Vector(0,0);
