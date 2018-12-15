@@ -401,7 +401,7 @@ function Player(x, y, socket, user, room) {
 	this.canMove = true;
 	this.gracePeriod = 500;
 	this.canBeDamaged = true;
-	this.knockback = 5;
+	this.knockback = 10;
 
 	this.renderStyle = {
 		shape: "circle",
@@ -430,7 +430,8 @@ function Player(x, y, socket, user, room) {
 	this.collide = function (other, response) {
 		// do nothing on collision yet
 		if (other.damage != null) {
-			other.damage(this.bodyDamage, this.knockback, );
+			console.log("damaging other")
+			other.damage(this.bodyDamage, response.overlapV, this.knockback);
 		}
 	}
 
@@ -446,7 +447,7 @@ function Player(x, y, socket, user, room) {
 				delete movableEntities[this.id];
 			} else {
 				this.canBeDamaged = false;
-				setTimeout(function () {this.canBeDamaged = true}, gracePeriod)
+				setTimeout(function (id) {movableEntities[id].canBeDamaged = true}, this.gracePeriod, this.id);
 			}
 		}
 	}
@@ -534,9 +535,9 @@ function Zombie(x, y, room, id) {
 	this.maxHealth = 10;
 	this.health = this.maxHealth;
 	this.canMove = true;
-	this.gracePeriod = 100;
+	this.gracePeriod = 500;
 	this.canBeDamaged = true;
-	this.knockback = 5;
+	this.knockback = 10;
 
 	this.renderStyle = {
 		shape: "rectangle",
@@ -610,7 +611,7 @@ function Zombie(x, y, room, id) {
 				delete movableEntities[this.id];
 			} else {
 				this.canBeDamaged = false;
-				setTimeout(function () {this.canBeDamaged = true}, gracePeriod)
+				setTimeout(function (id) {movableEntities[id].canBeDamaged = true}, this.gracePeriod, this.id)
 			}
 		}
 	}

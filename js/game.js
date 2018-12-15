@@ -4,7 +4,9 @@ var scale;
 
 Game.init = function () {
   game.scale.scaleMode = Phaser.ScaleManager.EXACT_FIT;
-  game.scale.setResizeCallback(Game.resize);
+  //game.scale.setResizeCallback(Game.resize);
+  game.scale.onSizeChange = Game.resize;
+  game.scale.onFullscreenChange = Game.resize;
   scale = game.height / 900;
 };
 
