@@ -399,6 +399,9 @@ function Player(x, y, socket, user, room) {
 	this.maxHealth = 10;
 	this.health = this.maxHealth;
 	this.canMove = true;
+	this.gracePeriod = 500;
+	this.canBeDamaged = true;
+	this.knockback = 5;
 
 	this.renderStyle = {
 		shape: "circle",
@@ -427,19 +430,24 @@ function Player(x, y, socket, user, room) {
 	this.collide = function (other, response) {
 		// do nothing on collision yet
 		if (other.damage != null) {
-			ApplyKnockback(other, response.overlapV, 10);
-			other.damage(this.bodyDamage);
+			other.damage(this.bodyDamage, this.knockback, );
 		}
 	}
 
-	this.damage = function (amount) {
-		this.health -= amount;
-		var socket
-		namespaces[this.roomID].emit('update health', this)
-		if (this.health <= 0) {
-			namespaces[this.roomID].emit('death', this);
-			removeEntityFromRoom(this, rooms[this.roomID]);
-			delete movableEntities[this.id];
+	this.damage = function (amount, knockbackDirection, knockbackIntensity) {
+		if (this.canBeDamaged) {
+			ApplyKnockback(this, knockbackDirection, knockbackIntensity);
+			this.health -= amount;
+			var socket
+			namespaces[this.roomID].emit('update health', this)
+			if (this.health <= 0) {
+				namespaces[this.roomID].emit('death', this);
+				removeEntityFromRoom(this, rooms[this.roomID]);
+				delete movableEntities[this.id];
+			} else {
+				this.canBeDamaged = false;
+				setTimeout(function () {this.canBeDamaged = true}, gracePeriod)
+			}
 		}
 	}
 
@@ -526,6 +534,9 @@ function Zombie(x, y, room, id) {
 	this.maxHealth = 10;
 	this.health = this.maxHealth;
 	this.canMove = true;
+	this.gracePeriod = 100;
+	this.canBeDamaged = true;
+	this.knockback = 5;
 
 	this.renderStyle = {
 		shape: "rectangle",
@@ -540,8 +551,7 @@ function Zombie(x, y, room, id) {
 		// modify other's health
 		// set other's velocity to simulate knockback
 		if (other instanceof Player) {
-			ApplyKnockback(other, response.overlapV, 10);
-			other.damage(this.bodyDamage);
+			other.damage(this.bodyDamage, response.overlapV, this.knockback);
 		}
 	}
 
@@ -587,14 +597,21 @@ function Zombie(x, y, room, id) {
 		}
 	}
 
-	this.damage = function (amount) {
-		this.health -= amount;
-		namespaces[this.roomID].emit('update health', this)
-		if (this.health <= 0) {
-			namespaces[this.roomID].emit('death', this);
-			removeEntityFromRoom(this, rooms[this.roomID]);
-			delete enemies[this.id];
-			delete movableEntities[this.id];
+	this.damage = function (amount, knockbackDirection, knockbackIntensity) {
+		if (this.canBeDamaged) {
+			ApplyKnockback(this, knockbackDirection, knockbackIntensity);
+			this.health -= amount;
+			var socket
+			namespaces[this.roomID].emit('update health', this)
+			if (this.health <= 0) {
+				namespaces[this.roomID].emit('death', this);
+				removeEntityFromRoom(this, rooms[this.roomID]);
+				delete enemies[this.id];
+				delete movableEntities[this.id];
+			} else {
+				this.canBeDamaged = false;
+				setTimeout(function () {this.canBeDamaged = true}, gracePeriod)
+			}
 		}
 	}
 
